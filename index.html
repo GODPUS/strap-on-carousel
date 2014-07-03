@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<!--
+  Created using jsbin.com
+  Source can be edited via http://jsbin.com/beyateqe/11/edit
+-->
+<head>
+<script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
+  <meta charset="utf-8">
+  <title>JS Bin</title>
+
+<style id="jsbin-css">
+.slider {
+  position: relative;
+  height: 200px;
+  width: 60%;
+  margin: 0 auto;
+  overflow: hidden;
+  border: solid 1px #000;
+}
+
+.slides {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+}
+
+.slide {
+  background-color: white;
+  margin-right: 10px;
+  text-align: center;
+  line-height: 200px;
+  height: 200px;
+  float: left;
+  border: solid 1px #ccc;
+}
+
+@media (max-width: 800px) {
+  .slide.percentage-width {
+    width: 20% !important;
+  }
+
+  .slide.big.percentage-width {
+    width: 65% !important;
+  }
+}
+
+@media (min-width: 801px) {
+  .slide.percentage-width {
+    width: 100% !important;
+  }
+}
+</style>
+</head>
+<body>
+  <div class="slider">
+    <div class="slides">
+      <div class="slide">Slide 1</div>
+      <div class="slide">Slide 2</div>
+      <div class="slide big">Slide 3</div>
+      <div class="slide">Slide 4</div>
+      <div class="slide">Slide 5</div>
+    </div>
+  </div>
+  <div class="pager-container"></div>
+  <button class="slider-prev">Prev</button>
+  <button class="slider-next">Next</button>
+<script>
+;(function ($, window, document, undefined){
+
+    var pluginName = "slider",
+        defaults = {
+          slideSelector: ".slide",
+          slidesContainerSelector: ".slides",
+          nextSelector: ".slider-next",
+          prevSelector: ".slider-prev",
+          pagerContainerSelector: ".pager-container",
+          speed: 200,
+          group: true
+        };
+
+    function Plugin(element, options){
+        this.element = element;
+        this.$el = $(element);
+        this.options = $.extend( {}, defaults, options) ;
+        this._defaults = defaults;
+        this._name = pluginName;
+        this.$slides = this.$el.find(this.options.slideSelector);
+        this.$slidesContainer = this.$el.find(this.options.slidesContainerSelector);
+        this.$next = $(this.options.nextSelector);
+        this.$prev = $(this.options.prevSelector);
+        this.$pagerContainer = $(this.options.pagerContainerSelector);
+        this.pagers = [];
+        this.slides = [];
+        this.currentPager = null;
+        this.currentSlide = null;
+        this.savedSlidePosition = 0;
+        this.init();
+    }
+
+    Plugin.prototype = {
+
+      init: function(){
+          var self = this;
+          
+          $(window).resize(function(){ 
+            self.updateWidths();
+            self.updatePagers();
+            self.animate(0);
+          });
+          self.$next.click(function(){ self.next(); });
+          self.$prev.click(function(){ self.prev(); });
+        
+          self.updateWidths();
+          self.updatePagers();
+      },
+
+      updateWidths: function(){
+        var self = this;
+
+        self.$slides.each(function(index) {
+            var $slide = $(this);
+            //hack that sends width back in percentage form
+            $slide.parent().hide();
+            $slide.addClass('percentage-width');
+            var width = $slide.css('width');
+            $slide.removeClass('percentage-width');
+            $slide.parent().show();
+
+            if(width.indexOf('%') >= 0){
+              var percentageWidth = (parseFloat(width)*0.01)*self.$el.width();
+              $slide.width(percentageWidth);
+            }else{
+              $slide.width(parseFloat(width));
+            }
+        });
+      },
+
+      updatePagers: function(){
+          var self = this;
+          var totalWidth = 0;
+          var slideGroup = [];
+          var slideGroupTotalWidth = 0;
+          
+          self.$pagerContainer.empty();
+          self.pagers = [];
+
+          self.$slides.each(function(index) {
+            var $slide = $(this);
+            var $nextSlide = $(self.$slides[index+1]);
+
+            var slide = { $el: $slide, position: totalWidth, index: index };
+            slideGroup.push(slide);
+
+            totalWidth += Math.ceil($slide.outerWidth(true));
+            slideGroupTotalWidth += $slide.outerWidth(true);
+
+            if(self.options.group)
+            {
+              if($nextSlide.outerWidth(true))
+              {
+                if(slideGroupTotalWidth+$nextSlide.outerWidth(true) > self.$el.width()){
+                  self.addPager(slideGroup.slice(0));
+                  slideGroup.length = 0; //reset slide group
+                  slideGroupTotalWidth = 0;
+                }
+              }else{
+                self.addPager(slideGroup.slice(0)); //if at the last element, add pager
+              }
+            }else{
+              self.addPager(slideGroup.slice(0));
+              slideGroup.length = 0; //reset slide group
+              slideGroupTotalWidth = 0;
+            }
+
+          });
+        
+          self.$slidesContainer.width(totalWidth+100);
+      },
+
+      addPager: function(slides){
+        var self = this;
+        //console.log(slides);
+
+        var pager = { index: self.pagers.length, slides: slides };
+        var $pager = $('<button class="pager" data-index="'+pager.index+'">'+(pager.index+1)+'</button>');
+        pager.$el = $pager;
+        
+        self.$pagerContainer.append($pager);
+        self.pagers.push(pager);
+
+        //grab new pager based on old currentSlide, if none, use first pager
+        if(self.currentSlide){
+          $.each(slides, function(index, slide){
+            if(self.currentSlide.index === slide.index){
+              self.currentPager = pager;
+            }
+          });
+        }else if(pager.index === 0){
+          self.currentPager = pager;
+        }
+
+        $pager.click(function(){
+          self.currentPager = pager;
+          self.animate();
+        });
+      },
+
+      animate: function(speed){
+        var self = this;
+        if(typeof speed === "undefined"){ speed = self.options.speed; }
+        self.currentSlide = self.currentPager.slides[0];
+        console.log(self.currentSlide.index)
+        self.$slidesContainer.stop().animate({left: self.currentSlide.position*-1}, speed);
+      },
+
+      next: function(){
+        var self = this;
+        var currentIndex = self.currentPager.index+1;
+        if(currentIndex >= self.pagers.length){ currentIndex = 0; }
+        self.currentPager = self.pagers[currentIndex];
+        self.animate();
+      },
+
+      prev: function(){
+        var self = this;
+        var currentIndex = self.currentPager.index-1;
+        if(currentIndex < 0){ currentIndex = self.pagers.length-1; }
+        self.currentPager = self.pagers[currentIndex];
+        self.animate();
+      }
+
+    };
+  
+    // A really lightweight plugin wrapper around the constructor,
+    // preventing against multiple instantiations
+    $.fn[pluginName] = function ( options ) {
+        return this.each(function () {
+            if (!$.data(this, "plugin_" + pluginName)) {
+                $.data(this, "plugin_" + pluginName,
+                new Plugin( this, options ));
+            }
+        });
+    };
+
+})( jQuery, window, document );
+
+
+$(function(){
+  $('.slider').slider();
+});
+</script>
+</body>
+</html>
